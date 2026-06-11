@@ -58,17 +58,6 @@ def get_preprocessing_steps(modality: str) -> dict:
 
 
 def explain_concept(concept: str) -> dict:
-    """
-    Explains a key concept from the NeuroClaw paper or the Google ADK framework.
-
-    Args:
-        concept: Term to explain. Supported: 'agent', 'tool', 'skill',
-                 'workflow', 'neuroclaw', 'smri', 'qc'.
-
-    Returns:
-        A dict with 'concept', 'definition', and 'example' keys, or an 'error'
-        key if the concept is not recognised.
-    """
     definitions = {
         "agent": {
             "concept": "Agent",
