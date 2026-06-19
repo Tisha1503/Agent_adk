@@ -6,18 +6,6 @@ import dicom2nifti
 
 
 def load_as_nifti(path: str):
-    """Recognise the format of an input MRI dataset and return it as a loaded
-    nibabel NIfTI image, converting from DICOM or AFNI first if needed.
-
-    Args:
-        path: Path to a .nii / .nii.gz file, a DICOM directory, or an AFNI .HEAD file.
-
-    Returns:
-        A nibabel image object.
-
-    Raises:
-        ValueError: If the path's format is not recognised or conversion fails.
-    """
     if os.path.isdir(path):
         output_dir = tempfile.mkdtemp()
         dicom2nifti.convert_directory(path, output_dir, compression=True, reorient=True)
@@ -39,16 +27,6 @@ def load_as_nifti(path: str):
 
 
 def inspect_t1_image(path: str) -> dict:
-    """Inspect a T1-weighted MRI file or DICOM/AFNI dataset and return its
-    geometry, orientation, intensity stats, and zero-voxel ratio.
-
-    Args:
-        path: Path to a .nii / .nii.gz file, a DICOM directory, or an AFNI .HEAD file.
-
-    Returns:
-        A dict with shape, voxel_size_mm, affine, orientation, is_3d, has_nan,
-        intensity stats, and zero_voxel_ratio. Returns an error dict on failure.
-    """
     try:
         img = load_as_nifti(path)
         data = img.get_fdata()
