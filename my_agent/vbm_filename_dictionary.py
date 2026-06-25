@@ -141,3 +141,30 @@ def explain_filename(filename: str) -> dict:
         "status": "error",
         "message": f"No VBM pattern matches filename '{filename}'.",
     }
+
+
+if __name__ == "__main__":
+    import json
+    import pathlib
+
+    stages = {}
+    for pattern, info in VBM_FILENAME_DICTIONARY.items():
+        stage = info["stage"]
+        stages.setdefault(stage, []).append(pattern)
+
+    output = {
+        "pipeline": "SPM VBM with DARTEL",
+        "stages": [
+            {
+                "stage": stage,
+                "expected_patterns": stages.get(stage, []),
+            }
+            for stage in VBM_STAGE_ORDER
+        ],
+        "minimum_required_for_statistics": ["smwp1*.nii"],
+        "stage_order": VBM_STAGE_ORDER,
+    }
+
+    out_path = pathlib.Path(__file__).parent / "vbm_expected_outputs.json"
+    out_path.write_text(json.dumps(output, indent=2))
+    print(f"Written to {out_path}")

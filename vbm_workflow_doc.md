@@ -12,6 +12,45 @@ The whole pipeline in five words: **segment, normalize, modulate, smooth, test.*
 
 ---
 
+## Step 0: T1w Input Preparation and Orientation Checking
+
+### What it does
+
+Before any preprocessing can run, the T1-weighted image needs to be in a state that SPM can handle correctly. This step covers two things: confirming the file is a valid T1w structural image, and checking that its orientation is consistent with what the pipeline expects.
+
+Orientation matters because SPM's segmentation and normalization are built around templates in a specific orientation (typically RAS — Right, Anterior, Superior). If the image header reports a different orientation, or if the header and the actual voxel data disagree, every downstream step can produce spatially flipped or misregistered results. These errors are hard to catch later and corrupt all subsequent analysis.
+
+### Expected input
+
+The raw T1-weighted image from the scanner. Usual formats: `.nii`, `.nii.gz`, or a DICOM folder. Typical filenames: `T1.nii`, `sub-01_T1w.nii`, or `sub-01_T1w.nii.gz`.
+
+### What to confirm
+
+| Check | What to look for |
+|---|---|
+| File format | NIfTI (`.nii` / `.nii.gz`) or DICOM — not a JPEG or PNG |
+| Image dimensions | Should be 3D (a single volume), not 4D |
+| Voxel size | Ideally close to 1mm isotropic (e.g. 1×1×1 mm) |
+| Orientation code | Header should report a standard orientation (RAS, LAS, etc.) |
+| Header–data agreement | The orientation in the header should match the visible anatomy |
+| No NaN / empty data | Voxel values should be non-zero and finite across the brain |
+
+### Where this step can fail
+
+- DICOM-to-NIfTI conversion tools sometimes mis-set the orientation matrix. The image looks fine visually but the header is wrong, and SPM misaligns it to the template.
+- 4D files (time series mistakenly saved as a structural) crash or silently use only the first volume.
+- Voxel sizes far from 1mm isotropic (e.g. 1×1×5 mm) can still run but will produce lower-quality segmentations.
+- Left–right flips are the single most dangerous silent failure at this stage. The image processes normally and produces no errors, but every result is anatomically mirrored.
+
+### What to check visually
+
+- Open the image in a viewer (FSLeyes, MRIcron, or SPM's Check Reg). Confirm you can see a brain, not noise or an empty volume.
+- Check the orientation labels on the viewer axes. Anterior should be in front, left should be on the left (or right, depending on radiological vs neurological convention — just confirm it's consistent with your pipeline).
+- Verify the image is 3D by confirming there is no time or volume dimension.
+- Run your pipeline's header check tool (e.g. `nib.load(path).header` in Python, or `fslinfo`) and confirm the voxel dimensions match expectations.
+
+---
+
 ## Step 1: Tissue Segmentation
 
 ### What it does

@@ -1,0 +1,62 @@
+{
+  "pipeline": "SPM VBM with DARTEL",
+  "stages": [
+    {
+      "stage": "segmentation",
+      "expected_patterns": [
+        "c1*.nii",
+        "c2*.nii",
+        "c3*.nii",
+        "y_*.nii"
+      ]
+    },
+    {
+      "stage": "dartel_import",
+      "expected_patterns": [
+        "rc1*.nii",
+        "rc2*.nii"
+      ]
+    },
+    {
+      "stage": "dartel_alignment",
+      "expected_patterns": [
+        "u_rc1*.nii",
+        "Template_*.nii"
+      ]
+    },
+    {
+      "stage": "normalization",
+      "expected_patterns": [
+        "wc1*.nii",
+        "wc2*.nii"
+      ]
+    },
+    {
+      "stage": "modulation",
+      "expected_patterns": [
+        "mwc1*.nii",
+        "mwc2*.nii",
+        "mwp1*.nii"
+      ]
+    },
+    {
+      "stage": "smoothing",
+      "expected_patterns": [
+        "smwc1*.nii",
+        "smwc2*.nii",
+        "smwp1*.nii"
+      ]
+    }
+  ],
+  "minimum_required_for_statistics": [
+    "smwp1*.nii"
+  ],
+  "stage_order": [
+    "segmentation",
+    "dartel_import",
+    "dartel_alignment",
+    "normalization",
+    "modulation",
+    "smoothing"
+  ]
+}
