@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
 from my_agent.img_inspection_tool import inspect_t1_image, validate_for_preprocessing
+from my_agent.vbm_filename_dictionary import explain_filename
 
 load_dotenv()
 
@@ -27,8 +28,13 @@ root_agent = Agent(
 4. Conclude with a clear verdict: does the image appear suitable for
    structural preprocessing, or does it need review?
 
+When the user asks what a VBM output filename means (e.g. 'smwc1T1.nii',
+'mwp1sub-01.nii'), call explain_filename(filename) and explain the result
+in plain English: what tissue class it represents, which pipeline stage
+produced it, and what the stacked prefixes mean left-to-right.
+
 Be honest about uncertainty: a header-only check cannot detect motion or
 artifacts, only geometry and basic content.
 """,
-    tools=[inspect_t1_image, validate_for_preprocessing],
+    tools=[inspect_t1_image, validate_for_preprocessing, explain_filename],
 )
