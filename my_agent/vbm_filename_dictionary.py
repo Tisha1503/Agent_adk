@@ -108,6 +108,51 @@ VBM_FILENAME_DICTIONARY = {
         "stage": "smoothing",
         "produced_by": "CAT12",
     },
+
+    "p0*.nii": {
+        "tissue": "all tissues",
+        "description": "CAT12 label map — one image where 1=CSF, 2=gray matter, 3=white matter.",
+        "stage": "segmentation",
+        "produced_by": "CAT12",
+    },
+    "p1*.nii": {
+        "tissue": "gray matter",
+        "description": "CAT12 gray matter probability map (equivalent to SPM c1).",
+        "stage": "segmentation",
+        "produced_by": "CAT12",
+    },
+    "p2*.nii": {
+        "tissue": "white matter",
+        "description": "CAT12 white matter probability map (equivalent to SPM c2).",
+        "stage": "segmentation",
+        "produced_by": "CAT12",
+    },
+    "p3*.nii": {
+        "tissue": "CSF",
+        "description": "CAT12 CSF probability map (equivalent to SPM c3).",
+        "stage": "segmentation",
+        "produced_by": "CAT12",
+    },
+
+    "wp1*.nii": {
+        "tissue": "gray matter",
+        "description": "CAT12 warped gray matter in MNI space (equivalent to SPM wc1).",
+        "stage": "normalization",
+        "produced_by": "CAT12",
+    },
+    "wp2*.nii": {
+        "tissue": "white matter",
+        "description": "CAT12 warped white matter in MNI space (equivalent to SPM wc2).",
+        "stage": "normalization",
+        "produced_by": "CAT12",
+    },
+
+    "cat_*.xml": {
+        "tissue": None,
+        "description": "CAT12 per-subject quality report. Contains image quality rating, noise estimate, and weighted overall score.",
+        "stage": "segmentation",
+        "produced_by": "CAT12",
+    },
 }
 
 
@@ -143,6 +188,66 @@ def explain_filename(filename: str) -> dict:
     }
 
 
+def detect_vbm_stage(folder_path: str) -> dict:
+    """Scan a folder and detect which VBM pipeline stage has been reached.
+
+    Works for both SPM-DARTEL (c1/wc1/mwc1/smwc1) and CAT12 (p1/wp1/mwp1/smwp1)
+    naming conventions.
+
+    Args:
+        folder_path: Path to a subject's VBM output folder.
+
+    Returns:
+        A dict with the detected stage, the files found, and the next step.
+    """
+    import os
+    import fnmatch
+
+    if not os.path.isdir(folder_path):
+        return {"status": "error", "message": f"Folder not found: {folder_path}"}
+
+    files = os.listdir(folder_path)
+
+    found = {}
+    for pattern, info in VBM_FILENAME_DICTIONARY.items():
+        matches = [f for f in files if fnmatch.fnmatch(f, pattern)]
+        if matches:
+            found[pattern] = {**info, "matched_files": matches}
+
+    if not found:
+        return {
+            "status": "success",
+            "detected_stage": "none",
+            "message": "No recognised VBM output files found. Pipeline may not have started.",
+            "next_step": "Run segmentation first.",
+        }
+
+    completed_stages = {info["stage"] for info in found.values()}
+    furthest = "none"
+    for stage in VBM_STAGE_ORDER:
+        if stage in completed_stages:
+            furthest = stage
+
+    next_step_map = {
+        "segmentation": "Run DARTEL import (rc1, rc2 files).",
+        "dartel_import": "Run DARTEL alignment to build templates and flow fields.",
+        "dartel_alignment": "Run normalization to produce warped maps (wc1 / wp1).",
+        "normalization": "Run modulation to produce volume-preserving maps (mwc1 / mwp1).",
+        "modulation": "Run smoothing to produce final input (smwc1 / smwp1).",
+        "smoothing": "Preprocessing complete. Ready for statistical analysis.",
+    }
+
+    return {
+        "status": "success",
+        "folder": folder_path,
+        "detected_stage": furthest,
+        "completed_stages": sorted(completed_stages),
+        "found_patterns": list(found.keys()),
+        "next_step": next_step_map.get(furthest, "Unknown stage."),
+        "is_complete": furthest == "smoothing",
+    }
+
+
 if __name__ == "__main__":
     import json
     import pathlib
@@ -153,7 +258,7 @@ if __name__ == "__main__":
         stages.setdefault(stage, []).append(pattern)
 
     output = {
-        "pipeline": "SPM VBM with DARTEL",
+        "pipeline": "SPM VBM with DARTEL and CAT12",
         "stages": [
             {
                 "stage": stage,
