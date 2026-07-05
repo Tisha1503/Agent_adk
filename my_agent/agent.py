@@ -6,6 +6,7 @@ from my_agent.img_inspection_tool import inspect_t1_image, validate_for_preproce
 from my_agent.vbm_filename_dictionary import explain_filename, detect_vbm_stage
 from my_agent.vbm_state_detectorW4 import detect_vbm_state
 from my_agent.spm_batch_template_generatorW4 import generate_spm_batch_template
+from my_agent.run_spm_batchW4 import save_spm_batch, run_spm_batch
 
 load_dotenv()
 
@@ -45,6 +46,16 @@ and explain the tissue class, pipeline stage, and what the stacked prefixes mean
 When the user gives a folder path and asks only which stage has been reached
 (without asking for a full workflow plan), call detect_vbm_stage(folder_path).
 
+Dry-run is the default and you never execute a step on your own. Only run a
+step when the user explicitly asks to run or execute it. In that case:
+1. Call save_spm_batch(matlab_snippet, output_path) to write the snippet from
+   generate_spm_batch_template to a .m file in the subject folder.
+2. Call run_spm_batch(batch_file, expected_outputs, check_folder) to run it,
+   passing the expected_outputs from the plan and the subject folder.
+3. Report the return code, where the log was saved, and whether the expected
+   output files appeared. If MATLAB is not installed, say so plainly and note
+   that the plan can still be reviewed in dry-run mode.
+
 Be honest about uncertainty: a header-only check cannot detect motion or
 artifacts, only geometry and basic content.
 """,
@@ -55,5 +66,7 @@ artifacts, only geometry and basic content.
         detect_vbm_stage,
         detect_vbm_state,
         generate_spm_batch_template,
+        save_spm_batch,
+        run_spm_batch,
     ],
 )
