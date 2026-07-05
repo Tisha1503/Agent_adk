@@ -92,7 +92,7 @@ VBM_FILENAME_DICTIONARY = {
 
     "smwc1*.nii": {
         "tissue": "gray matter",
-        "description": "Smoothed modulated warped gray matter — final VBM input.",
+        "description": "Smoothed modulated warped gray matter, final VBM input.",
         "stage": "smoothing",
         "produced_by": "Gaussian Smoothing",
     },

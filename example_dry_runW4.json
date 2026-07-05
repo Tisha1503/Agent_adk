@@ -1,0 +1,46 @@
+{
+  "detected_state": "SEGMENTATION_COMPLETED",
+  "state_description": "Tissue segmentation done. Gray matter, white matter, and CSF maps are present.",
+  "found_files": {
+    "c2*.nii": [
+      "c2T1.nii"
+    ],
+    "c3*.nii": [
+      "c3T1.nii"
+    ],
+    "c1*.nii": [
+      "c1T1.nii"
+    ]
+  },
+  "input_t1_found": true,
+  "input_t1_files": [
+    "T1.nii"
+  ],
+  "missing_for_next_step": [
+    "rc1*.nii, rc2*.nii (for SPM-DARTEL) or wc1*.nii / wp1*.nii (for CAT12 normalization)"
+  ],
+  "summary": "Tissue segmentation is complete. Gray matter, white matter, and CSF probability maps are present. The next step depends on your pipeline: for SPM-DARTEL, run DARTEL import; for CAT12, proceed directly to normalization.",
+  "next_step_plan": {
+    "step_name": "DARTEL Import",
+    "spm_function": "spm.tools.dartel.impo",
+    "input_files": {
+      "c1": "test_vbm_subject/c1T1.nii",
+      "c2": "test_vbm_subject/c2T1.nii"
+    },
+    "parameters": {},
+    "expected_outputs": [
+      "rc1T1.nii",
+      "rc2T1.nii"
+    ]
+  },
+  "why_needed": "DARTEL import rigidly aligns each subject's tissue maps to a common starting position before the iterative DARTEL warp. Without this step, subjects with different head positions in the scanner would not converge on a stable group template during alignment.",
+  "expected_outputs": [
+    "rc1T1.nii (rigidly aligned gray matter, ready for DARTEL)",
+    "rc2T1.nii (rigidly aligned white matter, ready for DARTEL)"
+  ],
+  "qc_risks": [
+    "If the rigid alignment looks off in one subject, that subject will pull the group template toward its position.",
+    "Check that rc1T1.nii and rc2T1.nii overlap sensibly with each other and with the same files from other subjects."
+  ],
+  "matlab_snippet": "matlabbatch{1}.spm.tools.dartel.impo.files{1} = {'test_vbm_subject/c1T1.nii,1'};\nmatlabbatch{1}.spm.tools.dartel.impo.files{2} = {'test_vbm_subject/c2T1.nii,1'};\n\nspm_jobman('run', matlabbatch);"
+}

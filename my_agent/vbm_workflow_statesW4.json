@@ -1,0 +1,136 @@
+{
+  "states": {
+    "RAW_T1_READY": {
+      "description": "A raw T1-weighted image is present but no VBM preprocessing has started. The pipeline is at the very beginning.",
+      "prerequisite_files": ["T1.nii or sub-XX_T1w.nii or sub-XX_T1w.nii.gz"],
+      "next_step": "Run tissue segmentation using SPM Unified Segmentation or CAT12.",
+      "why_needed": "Segmentation is the foundation of the whole VBM pipeline. Every downstream file is derived from the tissue probability maps it produces, so errors here propagate through every subsequent step.",
+      "expected_outputs": [
+        "c1*.nii (gray matter probability map)",
+        "c2*.nii (white matter probability map)",
+        "c3*.nii (CSF probability map)",
+        "y_*.nii (forward deformation field to MNI space)",
+        "mT1.nii (bias-corrected T1)"
+      ],
+      "qc_risks": [
+        "Poor input contrast from motion or low SNR causes noisy tissue maps",
+        "A strong uncorrected bias field can misclassify entire brain regions",
+        "Pediatric, elderly, or pathological brains deviate from the adult template priors SPM uses",
+        "Left-right flips in the header go undetected and corrupt all downstream results"
+      ]
+    },
+    "SEGMENTATION_COMPLETED": {
+      "description": "Tissue segmentation is done. Gray matter, white matter, and CSF probability maps exist. No normalization has happened yet.",
+      "prerequisite_files": [
+        "c1*.nii or p1*.nii (gray matter)",
+        "c2*.nii or p2*.nii (white matter)",
+        "c3*.nii or p3*.nii (CSF)"
+      ],
+      "next_step": "For SPM-DARTEL: run DARTEL import to rigidly align tissue maps. For CAT12: proceed directly to normalization.",
+      "why_needed": "The tissue maps are still in each subject's native space. Before voxel-by-voxel comparison across subjects is possible, they need to be aligned to a common space, which is what normalization accomplishes.",
+      "expected_outputs": [
+        "rc1*.nii, rc2*.nii (DARTEL import) or wc1*.nii, wp1*.nii (direct CAT12 normalization)"
+      ],
+      "qc_risks": [
+        "Overlay tissue maps on the original T1 to confirm they sit in the right anatomical regions before proceeding",
+        "A subject with a visibly poor segmentation should be reprocessed or excluded before DARTEL, since a bad segmentation pulls the group template toward it"
+      ]
+    },
+    "DARTEL_INPUT_READY": {
+      "description": "DARTEL import is done. Rigidly aligned tissue maps (rc1, rc2) exist and are ready for the iterative DARTEL alignment step.",
+      "prerequisite_files": ["rc1*.nii (rigidly aligned gray matter)", "rc2*.nii (rigidly aligned white matter)"],
+      "next_step": "Run DARTEL alignment across all subjects to build a study-specific group template and compute each subject's flow field.",
+      "why_needed": "DARTEL builds a template from your actual subjects rather than warping to a generic adult atlas. This study-specific template captures the shape characteristics of your group and produces more accurate warps, especially for atypical populations.",
+      "expected_outputs": [
+        "u_rc1*.nii (subject-specific DARTEL flow field)",
+        "Template_0.nii through Template_6.nii (iterative group templates)"
+      ],
+      "qc_risks": [
+        "DARTEL needs at least 20 subjects to produce a stable template -- smaller studies need a different approach",
+        "If any subject's tissue maps looked suspicious at the segmentation QC step, fix or exclude them before running DARTEL"
+      ]
+    },
+    "DARTEL_COMPLETED": {
+      "description": "DARTEL alignment is done. Subject-specific flow fields (u_rc1) and iterative group templates (Template_0 through Template_6) exist.",
+      "prerequisite_files": [
+        "u_rc1*.nii (DARTEL flow field per subject)",
+        "Template_6.nii (final group template)"
+      ],
+      "next_step": "Run normalization to warp each subject's tissue maps into MNI standard space using their flow field.",
+      "why_needed": "The flow fields computed by DARTEL encode how each subject's brain shape differs from the group template. Normalization applies these flow fields to bring all subjects into a common MNI coordinate system where voxel-by-voxel comparison is meaningful.",
+      "expected_outputs": [
+        "wc1*.nii or wp1*.nii (warped gray matter in MNI space)",
+        "wc2*.nii or wp2*.nii (warped white matter in MNI space)",
+        "mwc1*.nii or mwp1*.nii (modulated warped gray matter, volume-preserving)"
+      ],
+      "qc_risks": [
+        "Check Template_6.nii -- it should look like a blurry but clearly recognizable brain",
+        "Any subject whose flow field produces a visibly distorted warped image should be investigated for upstream segmentation problems",
+        "Confirm the final template was built from the expected number of subjects"
+      ]
+    },
+    "NORMALIZATION_COMPLETED": {
+      "description": "Normalization is done. Warped and modulated tissue maps in MNI space exist. Smoothing has not been run yet.",
+      "prerequisite_files": [
+        "wc1*.nii or wp1*.nii (warped gray matter)",
+        "mwc1*.nii or mwp1*.nii (modulated warped gray matter)"
+      ],
+      "next_step": "Run Gaussian smoothing on the modulated warped gray matter maps.",
+      "why_needed": "Even after normalization, small residual misalignments remain between subjects. Smoothing blurs the data so each voxel reflects a neighborhood average, which makes comparisons more robust and satisfies the smoothness assumptions required for the statistical corrections applied in the final analysis.",
+      "expected_outputs": [
+        "smwc1*.nii or smwp1*.nii (smoothed modulated warped gray matter -- final input to statistics)",
+        "smwc2*.nii or smwp2*.nii (smoothed modulated warped white matter)"
+      ],
+      "qc_risks": [
+        "Overlay warped maps on the MNI template and verify that major landmarks align across subjects before smoothing",
+        "Check the modulated maps for extreme intensity values that might indicate a bad warp"
+      ]
+    },
+    "SMOOTHING_COMPLETED": {
+      "description": "Smoothing is done and final VBM input files exist, but not all earlier pipeline files have been verified in this folder.",
+      "prerequisite_files": ["smwc1*.nii or smwp1*.nii (smoothed modulated warped gray matter)"],
+      "next_step": "Verify earlier-stage files are present, then proceed to second-level statistical analysis.",
+      "why_needed": "Having the smoothed files without confirming the full pipeline history means it is harder to trace and fix any problems that appear in the statistical results.",
+      "expected_outputs": [
+        "SPM.mat, beta_*.nii, spmT_*.nii (from second-level GLM analysis)"
+      ],
+      "qc_risks": [
+        "Confirm segmentation and normalization files are also present before running statistics",
+        "Do a final visual check comparing smwc1 files across subjects -- obvious outliers at this stage should be excluded"
+      ]
+    },
+    "VBM_READY_FOR_STATISTICS": {
+      "description": "The full preprocessing pipeline is complete and all prerequisite files have been verified. This folder is ready for second-level statistical analysis.",
+      "prerequisite_files": [
+        "c1*.nii or p1*.nii (segmentation)",
+        "wc1*.nii or wp1*.nii (normalization)",
+        "smwc1*.nii or smwp1*.nii (smoothing)"
+      ],
+      "next_step": "Run second-level GLM analysis in SPM using all subjects' smwc1 or smwp1 files.",
+      "why_needed": "The preprocessed maps from all subjects need to be fed into a voxel-wise statistical model that can identify where gray matter volume differs between groups or correlates with a variable of interest, while controlling for confounds like age, sex, and head size.",
+      "expected_outputs": [
+        "SPM.mat (design matrix, contrasts, and results object)",
+        "beta_*.nii (effect size maps)",
+        "spmT_*.nii (t-statistic maps)",
+        "Thresholded cluster maps after FWE or FDR correction"
+      ],
+      "qc_risks": [
+        "Always include total intracranial volume (TIV) as a covariate to control for head size",
+        "Use FWE or FDR correction -- uncorrected results are not publishable in structural MRI analysis",
+        "Check residual variance maps after fitting the GLM for patches of unusually high or low variance"
+      ]
+    },
+    "INCOMPLETE_OR_ERROR": {
+      "description": "Files are present in the folder but the pipeline state does not make logical sense. Later-stage files exist without the earlier-stage files that should have produced them.",
+      "prerequisite_files": [],
+      "next_step": "Investigate which files are missing, check whether earlier preprocessing outputs were accidentally deleted or moved, and rerun the missing steps if necessary.",
+      "why_needed": "A logically inconsistent folder state means the pipeline history cannot be reconstructed. Running further steps on top of incomplete inputs will produce results that cannot be trusted.",
+      "expected_outputs": [],
+      "qc_risks": [
+        "Do not proceed with any further processing until the inconsistency is understood",
+        "Check whether files were moved to a different folder rather than deleted",
+        "If the earlier steps need to be rerun, make sure the original T1 input is still available"
+      ]
+    }
+  }
+}
