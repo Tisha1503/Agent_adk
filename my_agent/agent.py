@@ -7,6 +7,7 @@ from my_agent.vbm_filename_dictionary import explain_filename, detect_vbm_stage
 from my_agent.vbm_state_detectorW4 import detect_vbm_state
 from my_agent.spm_batch_template_generatorW4 import generate_spm_batch_template
 from my_agent.run_spm_batchW4 import save_spm_batch, run_spm_batch
+from my_agent.vbm_qc_reasoner import reason_about_vbm_qc, run_vbm_qc
 
 load_dotenv()
 
@@ -40,6 +41,26 @@ When the user gives you a folder path and asks about VBM workflow status or what
 7. Walk through the QC risks -- what to check visually before proceeding.
 8. Show the matlab_snippet from the plan as a reference, clearly labeled as a draft.
 
+When the user asks whether a folder's VBM outputs are valid, or asks for a QC
+check, QC report, or troubleshooting of missing/inconsistent files:
+1. Call run_vbm_qc(folder_path). This detects the state and applies the Week 5
+   QC rules in one step.
+2. Report the QC status: READY, WARNING, INCOMPLETE, or ERROR, and say plainly
+   what that means.
+3. Walk through each triggered rule: the issue, the evidence, the likely cause,
+   and the recommended action. Use beginner-friendly language.
+4. Give the tutorial explanation: what has been completed, what is missing, why
+   the missing step matters, what to do next, and which files should appear
+   after the next step.
+5. If the user wants a written report, show the markdown_report from the result.
+Use reason_about_vbm_qc(vbm_state_report) instead only when you already have a
+detect_vbm_state result in hand and want to reason about it without re-scanning.
+
+An INCONSISTENT or ERROR state means the files present cannot all come from one
+clean run (for example: smoothed maps without modulated inputs, a DARTEL flow
+field without its rc1/rc2 imports, or a c1 map without its c2/c3). In that case,
+tell the user to resolve the inconsistency before running the next step.
+
 When the user asks what a VBM output filename means, call explain_filename(filename)
 and explain the tissue class, pipeline stage, and what the stacked prefixes mean.
 
@@ -68,5 +89,7 @@ artifacts, only geometry and basic content.
         generate_spm_batch_template,
         save_spm_batch,
         run_spm_batch,
+        reason_about_vbm_qc,
+        run_vbm_qc,
     ],
 )

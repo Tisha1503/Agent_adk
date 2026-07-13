@@ -59,6 +59,112 @@ def _is_raw_t1(filename):
     return True
 
 
+def _subject_ids(files, prefix):
+    """Return the set of subject identifiers among files starting with prefix.
+
+    A subject id is whatever is left after stripping the tissue-class prefix and
+    the .nii/.nii.gz extension, e.g. 'c1sub-01_T1.nii' -> 'sub-01_T1'. This lets
+    us compare which subjects reached one stage versus another.
+    """
+    ids = set()
+    for f in files:
+        if f.startswith(prefix):
+            stem = f[len(prefix):]
+            for ext in (".nii.gz", ".nii"):
+                if stem.endswith(ext):
+                    stem = stem[: -len(ext)]
+                    break
+            ids.add(stem)
+    return ids
+
+
+def analyze_vbm_inconsistencies(files) -> list:
+    """Look for logically inconsistent combinations of VBM output files.
+
+    These are situations where the files present cannot all come from a single,
+    clean pipeline run: a later stage exists without the earlier stage that must
+    have produced its input, a tissue set is only partly written, or a group
+    DARTEL run only covered some subjects. Each hit is returned as a dict with a
+    stable ``rule_id`` (matched by the Week 5 QC reasoner), a human ``detail``,
+    and the specific ``files`` that triggered it.
+
+    Args:
+        files: List of filenames in the subject/study folder.
+
+    Returns:
+        A list of inconsistency dicts. Empty when nothing looks wrong.
+    """
+    def match(pattern):
+        return [f for f in files if fnmatch.fnmatch(f, pattern)]
+
+    issues = []
+
+    for gm, wm, csf, conv in (
+        ("c1*.nii", "c2*.nii", "c3*.nii", "SPM"),
+        ("p1*.nii", "p2*.nii", "p3*.nii", "CAT12"),
+    ):
+        if match(gm) and not (match(wm) and match(csf)):
+            missing = []
+            if not match(wm):
+                missing.append(wm)
+            if not match(csf):
+                missing.append(csf)
+            issues.append({
+                "rule_id": "partial_segmentation",
+                "detail": (
+                    f"{conv} gray matter map present but {', '.join(missing)} "
+                    f"missing; tissue classes are normally written together."
+                ),
+                "files": match(gm),
+                "missing": missing,
+            })
+
+    if match("u_rc1*.nii") and not (match("rc1*.nii") and match("rc2*.nii")):
+        missing = [p for p in ("rc1*.nii", "rc2*.nii") if not match(p)]
+        issues.append({
+            "rule_id": "flowfield_without_import",
+            "detail": (
+                "A DARTEL flow field (u_rc1) exists but the rigidly imported "
+                f"{', '.join(missing)} it needs are missing."
+            ),
+            "files": match("u_rc1*.nii"),
+            "missing": missing,
+        })
+
+    import_ids = _subject_ids(files, "rc1")
+    flow_ids = _subject_ids(files, "u_rc1")
+    if flow_ids and import_ids and import_ids != flow_ids:
+        without_flow = sorted(import_ids - flow_ids)
+        if without_flow:
+            issues.append({
+                "rule_id": "partial_dartel_subjects",
+                "detail": (
+                    f"{len(import_ids)} subject(s) have DARTEL imports but "
+                    f"{len(without_flow)} have no flow field: "
+                    f"{', '.join(without_flow)}."
+                ),
+                "files": match("u_rc1*.nii"),
+                "missing": without_flow,
+            })
+
+    for sm, mw, conv in (
+        ("smwc1*.nii", "mwc1*.nii", "SPM"),
+        ("smwp1*.nii", "mwp1*.nii", "CAT12"),
+    ):
+        if match(sm) and not match(mw):
+            issues.append({
+                "rule_id": "smoothed_without_modulated",
+                "detail": (
+                    f"{conv} smoothed maps ({sm}) exist but the modulated "
+                    f"input ({mw}) is missing."
+                ),
+                "files": match(sm),
+                "missing": [mw],
+            })
+
+    return issues
+
+
 def detect_vbm_state(folder_path: str) -> dict:
     """Scan a subject folder and classify it into a formal VBM pipeline state.
 
@@ -106,20 +212,34 @@ def detect_vbm_state(folder_path: str) -> dict:
     found_files.update(norm)
     found_files.update(smooth)
 
-    is_inconsistent = (
+    inconsistencies = analyze_vbm_inconsistencies(files)
+    inconsistent_files = sorted(
+        {f for issue in inconsistencies for f in issue.get("files", [])}
+    )
+    inconsistency_ids = {issue["rule_id"] for issue in inconsistencies}
+
+    later_without_seg = (
         (has_smooth and not has_seg)
         or (has_norm and not has_seg)
         or (has_dartel_align and not has_seg)
     )
+    is_inconsistent = later_without_seg or bool(inconsistencies)
 
     if is_inconsistent:
         state = "INCOMPLETE_OR_ERROR"
         missing = []
-        summary = (
-            "Later-stage VBM files are present but earlier segmentation files are missing. "
-            "This usually means files were deleted or moved after preprocessing ran. "
-            "Check that c1/c2/c3 (SPM) or p1/p2/p3 (CAT12) tissue maps are in this folder."
-        )
+        if inconsistencies:
+            summary = (
+                "The files present are not consistent with a single clean pipeline run. "
+                + " ".join(issue["detail"] for issue in inconsistencies)
+                + " See the QC report for likely causes and how to fix each one."
+            )
+        else:
+            summary = (
+                "Later-stage VBM files are present but earlier segmentation files are missing. "
+                "This usually means files were deleted or moved after preprocessing ran. "
+                "Check that c1/c2/c3 (SPM) or p1/p2/p3 (CAT12) tissue maps are in this folder."
+            )
 
     elif has_smooth:
         all_prereqs = has_seg and has_norm
@@ -209,5 +329,9 @@ def detect_vbm_state(folder_path: str) -> dict:
         "input_t1_found": input_t1_found,
         "input_t1_files": t1_files,
         "missing_for_next_step": missing,
+        "inconsistencies": inconsistencies,
+        "inconsistent_files": inconsistent_files,
+        "inconsistency_ids": sorted(inconsistency_ids),
+        "folder_path": folder_path,
         "summary": summary,
     }

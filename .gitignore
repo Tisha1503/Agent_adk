@@ -1,0 +1,14 @@
+# Secrets
+.env
+*/.env
+
+# Python
+__pycache__/
+*.pyc
+
+# ADK local state
+.adk/
+*/.adk/
+
+# SPM run artifacts
+*_run.log

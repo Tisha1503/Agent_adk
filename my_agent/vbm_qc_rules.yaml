@@ -1,0 +1,129 @@
+rules:
+  - id: no_recognizable_files
+    issue: "No recognizable VBM files"
+    evidence: "The folder has neither a raw T1w image nor any SPM/CAT12 output file."
+    likely_cause: >-
+      The folder is empty, points at the wrong location, or the filenames do
+      not follow SPM (c1/wc1/mwc1/smwc1) or CAT12 (p1/wp1/mwp1/smwp1) naming.
+    severity: high
+    recommended_action: >-
+      Confirm the path points at the subject's data folder and that the input
+      T1w image is present and named as a plain .nii / .nii.gz.
+    expected_output: "At minimum a raw T1w image, then c1/c2/c3 after segmentation."
+    maps_to_status: ERROR
+
+  - id: later_without_segmentation
+    issue: "Later-stage files without segmentation"
+    evidence: "Normalized, DARTEL, or smoothed files exist but c1/c2/c3 (or p1/p2/p3) are absent."
+    likely_cause: >-
+      The tissue maps were deleted or moved after preprocessing ran, or the
+      outputs were copied into this folder without their segmentation inputs.
+    severity: critical
+    recommended_action: >-
+      Restore the c1/c2/c3 (SPM) or p1/p2/p3 (CAT12) tissue maps into this
+      folder, or re-run segmentation so the whole chain is reproducible.
+    expected_output: "c1*.nii, c2*.nii, c3*.nii sitting alongside the later-stage files."
+    maps_to_status: ERROR
+
+  - id: partial_segmentation
+    issue: "Incomplete tissue segmentation"
+    evidence: "A gray matter map (c1/p1) exists but the matching c2/p2 or c3/p3 is missing."
+    likely_cause: >-
+      Segmentation was interrupted before writing every tissue class, the
+      number of tissue classes was set too low, or some class files were
+      deleted. All three tissue maps are normally written together.
+    severity: high
+    recommended_action: >-
+      Re-run segmentation and make sure it is configured to write gray matter,
+      white matter, and CSF (native + DARTEL-imported if using SPM-DARTEL).
+    expected_output: "A complete set c1/c2/c3 (or p1/p2/p3), one per tissue class."
+    maps_to_status: ERROR
+
+  - id: missing_deformation_field
+    issue: "Segmentation done but deformation field missing"
+    evidence: "c1/c2/c3 are present but the forward deformation field y_*.nii is missing."
+    likely_cause: >-
+      Segmentation was run with 'deformation fields' turned off. The y_ field
+      is what a plain (non-DARTEL) normalization needs to warp maps to MNI.
+    severity: medium
+    recommended_action: >-
+      If you plan to use DARTEL you can ignore this. Otherwise re-run
+      segmentation with the forward deformation field enabled.
+    expected_output: "y_*.nii next to the c1/c2/c3 tissue maps."
+    maps_to_status: WARNING
+
+  - id: flowfield_without_import
+    issue: "DARTEL flow field without rigid imports"
+    evidence: "A DARTEL flow field u_rc1*.nii exists but rc1*.nii / rc2*.nii are missing."
+    likely_cause: >-
+      The rigidly imported rc1/rc2 files were deleted after DARTEL ran, or they
+      were never generated and the flow field belongs to a different run.
+    severity: high
+    recommended_action: >-
+      Re-run DARTEL import to regenerate rc1/rc2, then confirm the flow field
+      was built from those same imports before normalizing.
+    expected_output: "rc1*.nii and rc2*.nii alongside u_rc1*.nii."
+    maps_to_status: ERROR
+
+  - id: partial_dartel_subjects
+    issue: "Only some subjects have DARTEL files"
+    evidence: "Several subjects have rc1/rc2 imports but only a subset have u_rc1 flow fields."
+    likely_cause: >-
+      DARTEL alignment was launched on a partial subject list, or it crashed
+      part-way through the group. DARTEL builds one shared template, so every
+      subject in the study must be included in the same run.
+    severity: medium
+    recommended_action: >-
+      Re-run DARTEL alignment over the full subject list so every subject gets
+      a flow field from the same study template.
+    expected_output: "One u_rc1*.nii per subject, plus Template_0..6 shared by the group."
+    maps_to_status: WARNING
+
+  - id: smoothed_without_modulated
+    issue: "Smoothed maps without modulated inputs"
+    evidence: "Smoothed maps (smwc1/smwp1) exist but the modulated maps (mwc1/mwp1) are missing."
+    likely_cause: >-
+      The modulated inputs were deleted after smoothing, or smoothing was run
+      on unmodulated warped maps by mistake, which measures GM density instead
+      of GM volume.
+    severity: high
+    recommended_action: >-
+      Confirm smoothing was run on the modulated maps. If unsure, re-run
+      modulation and smoothing so the final inputs are volume-preserving.
+    expected_output: "mwc1*.nii (or mwp1*.nii) present, and smwc1/smwp1 derived from them."
+    maps_to_status: ERROR
+
+  - id: normalized_not_modulated
+    issue: "Warped maps present but not modulated"
+    evidence: "Warped maps (wc1/wp1) exist but no modulated maps (mwc1/mwp1) were produced."
+    likely_cause: >-
+      Normalization ran without modulation. Unmodulated maps measure tissue
+      concentration/density; most VBM volume studies want modulated maps.
+    severity: low
+    recommended_action: >-
+      Decide deliberately: use modulated maps for volume, unmodulated for
+      density. If you want volume, re-run normalization with modulation on.
+    expected_output: "mwc1*.nii / mwp1*.nii if you intend to measure volume."
+    maps_to_status: WARNING
+
+  - id: smoothing_unverified
+    issue: "Smoothed outputs but earlier files unverified"
+    evidence: "Smoothed final inputs exist but not every earlier-stage file was found."
+    likely_cause: >-
+      Intermediate files were cleaned up after preprocessing to save space.
+      This is often fine, but it makes the run harder to audit or reproduce.
+    severity: low
+    recommended_action: >-
+      Confirm segmentation and normalization outputs exist somewhere, even if
+      archived, so the pipeline can be reproduced if a reviewer asks.
+    expected_output: "A verifiable trail of c1/c2/c3, wc1/mwc1, and smwc1 files."
+    maps_to_status: WARNING
+
+  - id: pipeline_complete
+    issue: "Pipeline complete"
+    evidence: "Smoothed modulated warped maps exist and every prerequisite file was verified."
+    likely_cause: "The full VBM pipeline ran end to end and left a complete file trail."
+    severity: low
+    recommended_action: "Proceed to second-level statistics (design matrix, covariates, TIV, correction)."
+    expected_output: "smwc1*.nii / smwp1*.nii ready as inputs to the group model."
+    maps_to_status: READY
